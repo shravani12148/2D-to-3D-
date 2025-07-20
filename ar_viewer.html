@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0">
+  <title>AR Model Viewer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/MTLLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three.ar.js/dist/three.ar.min.js"></script>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 0; 
+      overflow: hidden; 
+      font-family: Arial, sans-serif;
+    }
+    #ar-container { 
+      width: 100%; 
+      height: 100vh; 
+      position: relative;
+    }
+    #loading {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      z-index: 100;
+    }
+    #place-button {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      background: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 24px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 10;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      display: none;
+    }
+    #error-message {
+      position: absolute;
+      top: 20px;
+      left: 0;
+      width: 100%;
+      padding: 15px;
+      background: rgba(255,0,0,0.7);
+      color: white;
+      text-align: center;
+      display: none;
+      z-index: 50;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #4285f4;
+      animation: spin 1s ease-in-out infinite;
+      margin-bottom: 15px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="ar-container"></div>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loading-text">Initializing AR...</div>
+  </div>
+  <button id="place-button">Place Model</button>
+  <div id="error-message"></div>
+
+  <script>
+    // Global variables
+    let model = null;
+    let arSession = null;
+    let hitTestSource = null;
+    let controller = null;
+    
+    // DOM elements
+    const container = document.getElementById('ar-container');
+    const loadingElement = document.getElementById('loading');
+    const loadingText = document.getElementById('loading-text');
+    const placeButton = document.getElementById('place-button');
+    const errorMessage = document.getElementById('error-message');
+    
+    // Get model parameters from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const modelUrl = urlParams.get('model') || 'output_3d.obj';
+    const mtlUrl = urlParams.get('mtl') || 'output_3d.mtl';
+    
+    // Initialize Three.js
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true, 
+      alpha: true,
+      preserveDrawingBuffer: true // For screenshot functionality
+    });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    container.appendChild(renderer.domElement);
+    
+    // Create scene
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    
+    // Add lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(0.5, 1, 0.25);
+    scene.add(directionalLight);
+    
+    // Load the 3D model
+    function loadModel() {
+      loadingText.textContent = 'Loading 3D model...';
+      
+      const mtlLoader = new THREE.MTLLoader();
+      mtlLoader.load(mtlUrl, 
+        (materials) => {
+          materials.preload();
+          
+          const objLoader = new THREE.OBJLoader();
+          objLoader.setMaterials(materials);
+          objLoader.load(modelUrl, 
+            (object) => {
+              model = object;
+              model.scale.set(0.5, 0.5, 0.5);
+              model.visible = false; // Hide until placed
+              scene.add(model);
+              
+              // Check if we're ready to start AR
+              if (arSession) {
+                setupAR();
+              } else {
+                loadingText.textContent = 'Waiting for AR session...';
+              }
+            },
+            (xhr) => {
+              const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+              loadingText.textContent = `Loading model: ${percent}%`;
+            },
+            (error) => {
+              showError(`Failed to load model: ${error.message}`);
+            }
+          );
+        },
+        (xhr) => {
+          const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+          loadingText.textContent = `Loading materials: ${percent}%`;
+        },
+        (error) => {
+          showError(`Failed to load materials: ${error.message}`);
+        }
+      );
+    }
+    
+    // AR Session Setup
+    async function setupAR() {
+      try {
+        if (!navigator.xr) {
+          throw new Error('WebXR not supported in this browser');
+        }
+        
+        // Request AR session
+        arSession = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test', 'dom-overlay'],
+          domOverlay: { root: document.body }
+        });
+        
+        arSession.addEventListener('end', onSessionEnded);
+        
+        // Set up XR renderer
+        await renderer.xr.setSession(arSession);
+        
+        // Create controller for hit testing
+        controller = renderer.xr.getController(0);
+        scene.add(controller);
+        
+        // Set up hit test
+        const session = renderer.xr.getSession();
+        const viewerSpace = await session.requestReferenceSpace('viewer');
+        hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+        
+        // Show place button
+        placeButton.style.display = 'block';
+        loadingText.textContent = 'Point your device to detect surfaces';
+        
+      } catch (error) {
+        showError(`AR setup failed: ${error.message}`);
+      }
+    }
+    
+    // Place model in AR space
+    function placeModel() {
+      if (!model) return;
+      
+      // Perform hit test at screen center
+      const hitTestResults = controller.getHitTestResults(hitTestSource);
+      if (hitTestResults.length > 0) {
+        const hit = hitTestResults[0];
+        const hitMatrix = new THREE.Matrix4().fromArray(hit.getPose(renderer.xr.getReferenceSpace()).transform.matrix);
+        
+        // Position the model
+        model.position.setFromMatrixPosition(hitMatrix);
+        model.quaternion.setFromRotationMatrix(hitMatrix);
+        model.visible = true;
+        
+        // Hide place button after placement
+        placeButton.style.display = 'none';
+        loadingElement.style.display = 'none';
+      } else {
+        showError('No surface detected. Try moving your device around.');
+      }
+    }
+    
+    // Handle session end
+    function onSessionEnded() {
+      if (model) {
+        model.visible = false;
+      }
+      placeButton.style.display = 'none';
+      loadingElement.style.display = 'flex';
+      loadingText.textContent = 'AR session ended. Reload to try again.';
+    }
+    
+    // Show error message
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.style.display = 'block';
+      loadingElement.style.display = 'none';
+      
+      // Hide error after 5 seconds
+      setTimeout(() => {
+        errorMessage.style.display = 'none';
+      }, 5000);
+    }
+    
+    // Animation loop
+    function animate() {
+      renderer.setAnimationLoop(() => {
+        renderer.render(scene, camera);
+      });
+    }
+    
+    // Initialize everything
+    async function init() {
+      try {
+        // Check for WebXR support
+        if (!navigator.xr) {
+          throw new Error('WebXR not supported in your browser');
+        }
+        
+        // Check for AR support
+        const supported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (!supported) {
+          throw new Error('AR not supported on your device');
+        }
+        
+        // Load model and setup AR
+        loadModel();
+        animate();
+        
+        // Add event listeners
+        placeButton.addEventListener('click', placeModel);
+        window.addEventListener('resize', onWindowResize);
+        
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+    
+    // Handle window resize
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    // Start the application
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TRIPOD - 3D Model Viewer with AR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/MTLLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsartoolkit5@latest/build/artoolkit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsartoolkit5@latest/build/artoolkit.api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three.ar.js/dist/three.ar.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #00f0ff;
+      --primary-dark: #0066ff;
+      --accent: #ff00aa;
+      --danger: #ff3860;
+      --warning: #ffb400;
+      --bg: #0a0a0a;
+      --panel: #111111;
+      --panel-light: #1a1a1a;
+      --text: #f0f0f0;
+      --subtext: #888888;
+      --glow: 0 0 15px rgba(0, 240, 255, 0.5);
+      --accent-glow: 0 0 15px rgba(255, 0, 170, 0.5);
+    }
+
+    * { 
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Roboto Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(0, 0, 0, 0.8);
+      padding: 15px 20px;
+      color: var(--primary);
+      font-weight: bold;
+      font-size: 1.2rem;
+      font-family: 'Orbitron', sans-serif;
+      letter-spacing: 1px;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      backdrop-filter: blur(5px);
+      position: relative;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-logo i {
+      color: var(--accent);
+      text-shadow: var(--accent-glow);
+    }
+
+    .header-stats {
+      font-size: 0.9rem;
+      color: var(--subtext);
+      display: flex;
+      gap: 15px;
+    }
+
+    .container {
+      flex: 1;
+      padding: 30px 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      background: linear-gradient(to right, var(--primary), var(--primary-dark));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: var(--glow);
+      letter-spacing: 1px;
+      position: relative;
+      display: inline-block;
+    }
+
+    h1::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(to right, var(--primary), var(--primary-dark));
+      border-radius: 2px;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      color: var(--subtext);
+      margin-bottom: 25px;
+      font-weight: 300;
+    }
+
+    .button-container {
+      margin: 25px 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .button-container a, .reset-button, .control-button, .mode-button, .ar-button {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(0, 102, 255, 0.1));
+      color: var(--text);
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      border: 1px solid rgba(0, 240, 255, 0.2);
+      transition: all 0.3s ease;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .button-container a:hover, .reset-button:hover, .control-button:hover, 
+    .mode-button:hover, .ar-button:hover {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(0, 102, 255, 0.2));
+      transform: translateY(-2px);
+      box-shadow: var(--glow);
+      border-color: var(--primary);
+    }
+
+    .button-container a:active, .reset-button:active, .control-button:active, 
+    .mode-button:active, .ar-button:active {
+      transform: translateY(0);
+    }
+
+    .button-container a i, .reset-button i, .control-button i, 
+    .mode-button i, .ar-button i {
+      font-size: 1rem;
+    }
+
+    .download-btn {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(0, 102, 255, 0.2));
+      border-color: var(--primary);
+    }
+
+    .download-btn:hover {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.3), rgba(0, 102, 255, 0.3));
+    }
+
+    .ar-btn {
+      background: linear-gradient(135deg, rgba(255, 0, 170, 0.2), rgba(255, 180, 0, 0.2));
+      border-color: var(--accent);
+    }
+
+    .ar-btn:hover {
+      background: linear-gradient(135deg, rgba(255, 0, 170, 0.3), rgba(255, 180, 0, 0.3));
+    }
+
+    .viewer-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .control-button, .mode-button, .ar-button {
+      padding: 10px 15px;
+      min-width: 40px;
+      justify-content: center;
+    }
+
+    .mode-button.active {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.3), rgba(0, 102, 255, 0.3));
+      border-color: var(--primary);
+      box-shadow: var(--glow);
+    }
+
+    .ar-button.active {
+      background: linear-gradient(135deg, rgba(255, 0, 170, 0.3), rgba(255, 180, 0, 0.3));
+      border-color: var(--accent);
+      box-shadow: var(--accent-glow);
+    }
+
+    .viewer-wrapper {
+      width: 100%;
+      height: 70vh;
+      margin: 0 auto;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+      background: #000;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.1);
+      border: 1px solid rgba(0, 240, 255, 0.1);
+    }
+
+    #preloader {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      font-size: 1.1rem;
+      color: var(--primary);
+      font-weight: 500;
+      letter-spacing: 1px;
+      gap: 20px;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(0, 240, 255, 0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      box-shadow: var(--glow);
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+
+    .model-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 12px 15px;
+      border-radius: 6px;
+      border-left: 3px solid var(--primary);
+      font-size: 0.85rem;
+      z-index: 5;
+      backdrop-filter: blur(5px);
+    }
+
+    .model-info div {
+      margin-bottom: 5px;
+    }
+
+    .model-info span {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    /* AR Modal Styles */
+    .ar-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 1000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .ar-modal-content {
+      max-width: 600px;
+      background: var(--panel);
+      padding: 30px;
+      border-radius: 10px;
+      border: 1px solid var(--primary);
+      box-shadow: var(--glow);
+    }
+
+    .ar-modal h2 {
+      color: var(--primary);
+      margin-bottom: 20px;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .ar-modal p {
+      margin-bottom: 25px;
+      line-height: 1.6;
+    }
+
+    .qr-container {
+      margin: 20px auto;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      display: inline-block;
+    }
+
+    .ar-steps {
+      text-align: left;
+      margin: 20px 0;
+    }
+
+    .ar-step {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 15px;
+    }
+
+    .ar-step-number {
+      background: var(--primary);
+      color: var(--bg);
+      width: 25px;
+      height: 25px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 15px;
+      flex-shrink: 0;
+      font-weight: bold;
+    }
+
+    .ar-step-content {
+      flex: 1;
+    }
+
+    .close-ar {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 24px;
+      color: var(--text);
+      cursor: pointer;
+      transition: color 0.3s;
+    }
+
+    .close-ar:hover {
+      color: var(--primary);
+    }
+
+    /* Debug panel */
+    .debug-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      z-index: 5;
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255, 0, 170, 0.2);
+      max-width: 200px;
+    }
+
+    .debug-title {
+      color: var(--accent);
+      margin-bottom: 8px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .debug-item {
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .debug-value {
+      color: var(--primary);
+      font-family: 'Roboto Mono', monospace;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      h1 { font-size: 1.8rem; }
+      .header-stats { display: none; }
+      .viewer-wrapper {
+        height: 60vh;
+      }
+      .button-container a, .reset-button, .control-button, .mode-button, .ar-button {
+        padding: 10px 15px;
+        font-size: 0.8rem;
+      }
+      .model-info {
+        font-size: 0.7rem;
+        bottom: 10px;
+        left: 10px;
+      }
+      .ar-modal-content {
+        width: 90%;
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-logo">
+      <i class="fas fa-cube"></i>
+      <span>TRIPOD 3D VIEWER PRO</span>
+    </div>
+    <div class="header-stats">
+      <span><i class="fas fa-microchip"></i> GPU ACCELERATED</span>
+      <span><i class="fas fa-shield-alt"></i> SECURE RENDERING</span>
+      <span><i class="fas fa-expand"></i> HIGH-RES MODE</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <h1>3D MODEL VIEWER WITH AR</h1>
+    <p class="subtitle">View your model in 3D or experience it in Augmented Reality</p>
+
+    <div class="viewer-controls">
+      <button class="control-button" onclick="toggleWireframe()">
+        <i class="fas fa-border-style"></i> Wireframe
+      </button>
+      <button class="control-button" onclick="toggleGrid()">
+        <i class="fas fa-th"></i> Grid
+      </button>
+      <button class="control-button" onclick="toggleAxes()">
+        <i class="fas fa-arrows-alt"></i> Axes
+      </button>
+      <button class="control-button" onclick="toggleShadows()">
+        <i class="fas fa-lightbulb"></i> Shadows
+      </button>
+      <button class="control-button" onclick="toggleBloom()">
+        <i class="fas fa-sun"></i> Bloom
+      </button>
+      <button class="control-button" onclick="toggleMeasurementMode()">
+        <i class="fas fa-ruler-combined"></i> Measure
+      </button>
+      <button class="mode-button active" onclick="setViewMode('solid')" id="solid-mode">
+        <i class="fas fa-cube"></i> Solid
+      </button>
+      <button class="mode-button" onclick="setViewMode('xray')" id="xray-mode">
+        <i class="fas fa-x-ray"></i> X-Ray
+      </button>
+      <button class="mode-button" onclick="setViewMode('ghost')" id="ghost-mode">
+        <i class="fas fa-ghost"></i> Ghost
+      </button>
+      <button class="ar-button ar-btn" onclick="showARModal()">
+        <i class="fas fa-mobile-alt"></i> View in AR
+      </button>
+      <button class="reset-button" onclick="resetView()">
+        <i class="fas fa-sync-alt"></i> Reset
+      </button>
+    </div>
+
+    <div class="button-container">
+      <a href="{{ url_for('download') }}" class="download-btn">
+        <i class="fas fa-download"></i> Download Model
+      </a>
+      <a href="{{ url_for('index') }}">
+        <i class="fas fa-upload"></i> Upload New
+      </a>
+      <a href="#" onclick="screenshot()">
+        <i class="fas fa-camera"></i> Screenshot
+      </a>
+      <a href="#" onclick="toggleFullscreen()">
+        <i class="fas fa-expand"></i> Fullscreen
+      </a>
+    </div>
+
+    <div class="viewer-wrapper" id="viewer-wrapper">
+      <div id="preloader">
+        <div class="spinner"></div>
+        <div class="loading-text">INITIALIZING 3D RENDER ENGINE...</div>
+      </div>
+      <div class="model-info">
+        <div><span>Model:</span> Architectural Design</div>
+        <div><span>Format:</span> OBJ/MTL</div>
+        <div><span>Scale:</span> <span id="model-scale">1:100</span></div>
+        <div><span>Status:</span> <span id="model-status">Loading...</span></div>
+      </div>
+      <div class="debug-panel">
+        <div class="debug-title">
+          <i class="fas fa-bug"></i> DEBUG INFO
+        </div>
+        <div class="debug-item">
+          <span>Polygons:</span>
+          <span class="debug-value" id="poly-count">0</span>
+        </div>
+        <div class="debug-item">
+          <span>Textures:</span>
+          <span class="debug-value" id="tex-count">0</span>
+        </div>
+        <div class="debug-item">
+          <span>Vertices:</span>
+          <span class="debug-value" id="vert-count">0</span>
+        </div>
+        <div class="debug-item">
+          <span>FPS:</span>
+          <span class="debug-value" id="fps-counter">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AR Modal -->
+  <div class="ar-modal" id="ar-modal">
+    <span class="close-ar" onclick="closeARModal()">&times;</span>
+    <div class="ar-modal-content">
+      <h2><i class="fas fa-mobile-alt"></i> VIEW IN AUGMENTED REALITY</h2>
+      <p>Scan this QR code with your mobile device to view this 3D model in your physical space:</p>
+      
+      <div class="qr-container" id="qr-code"></div>
+      
+      <div class="ar-steps">
+        <div class="ar-step">
+          <div class="ar-step-number">1</div>
+          <div class="ar-step-content">Open your camera app or QR scanner on your mobile device</div>
+        </div>
+        <div class="ar-step">
+          <div class="ar-step-number">2</div>
+          <div class="ar-step-content">Point your camera at the QR code above to open the AR viewer</div>
+        </div>
+        <div class="ar-step">
+          <div class="ar-step-number">3</div>
+          <div class="ar-step-content">When prompted, allow camera access for AR functionality</div>
+        </div>
+        <div class="ar-step">
+          <div class="ar-step-number">4</div>
+          <div class="ar-step-content">Move your device to detect surfaces and tap to place the model</div>
+        </div>
+      </div>
+      
+      <p><small>Note: AR functionality requires a device with ARCore (Android) or ARKit (iOS) support</small></p>
+    </div>
+  </div>
+
+  <footer>
+    &copy; 2025 TRIPOD ARCHITECTS | Neural Rendering Technology v4.1.0 | THREE.js r128
+  </footer>
+
+  <script>
+    // Main Three.js variables
+    let scene, camera, renderer, controls;
+    let model, defaultCamPosition;
+    let gridHelper, axesHelper;
+    let stats = {
+      vertices: 0,
+      faces: 0,
+      textures: 0
+    };
+    let lastTime = 0;
+    let frameCount = 0;
+    let fps = 0;
+    let arSession = null;
+
+    // Initialize the 3D viewer
+    function initViewer() {
+      const container = document.getElementById("viewer-wrapper");
+      
+      // Create scene with fog
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050505);
+      scene.fog = new THREE.FogExp2(0x050505, 0.0015);
+      
+      // Setup camera with wider field of view
+      camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 1, 10000);
+      camera.position.set(0, 300, 500);
+      defaultCamPosition = camera.position.clone();
+      
+      // Create renderer with enhanced settings
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        powerPreference: "high-performance"
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+      
+      // Setup orbit controls with smoother damping
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.screenSpacePanning = false;
+      controls.maxPolarAngle = Math.PI;
+      controls.minDistance = 100;
+      controls.maxDistance = 2000;
+      controls.target.set(0, 0, 0);
+      
+      // Enhanced lighting setup
+      setupLights();
+      
+      // Helpers
+      setupHelpers();
+      
+      // Load the 3D model with larger scale
+      loadModel();
+      
+      // Start animation loop
+      animate();
+      
+      // Handle window resize
+      window.addEventListener('resize', onWindowResize);
+      
+      // Generate AR QR code
+      generateQRCode();
+    }
+    
+    // Enhanced lighting setup
+    function setupLights() {
+      // Ambient light
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.7);
+      scene.add(ambientLight);
+      
+      // Hemisphere light for natural outdoor lighting
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+      hemiLight.position.set(0, 400, 0);
+      scene.add(hemiLight);
+      
+      // Directional light (sun)
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(200, 400, 200);
+      dirLight.castShadow = true;
+      dirLight.shadow.camera.top = 500;
+      dirLight.shadow.camera.bottom = -300;
+      dirLight.shadow.camera.left = -400;
+      dirLight.shadow.camera.right = 400;
+      dirLight.shadow.mapSize.width = 4096;
+      dirLight.shadow.mapSize.height = 4096;
+      dirLight.shadow.bias = -0.001;
+      scene.add(dirLight);
+      
+      // Point lights for accent lighting
+      const pointLight1 = new THREE.PointLight(0xff00aa, 1.5, 300);
+      pointLight1.position.set(100, 200, -100);
+      pointLight1.castShadow = true;
+      scene.add(pointLight1);
+      
+      const pointLight2 = new THREE.PointLight(0x00ffaa, 1.0, 200);
+      pointLight2.position.set(-100, 150, 100);
+      pointLight2.castShadow = true;
+      scene.add(pointLight2);
+    }
+    
+    // Setup helpers (grid, axes)
+    function setupHelpers() {
+      // Larger grid helper
+      gridHelper = new THREE.GridHelper(1000, 100, 0x555555, 0x333333);
+      gridHelper.position.y = -0.5;
+      gridHelper.visible = false;
+      scene.add(gridHelper);
+      
+      // Larger axes helper
+      axesHelper = new THREE.AxesHelper(150);
+      axesHelper.visible = false;
+      scene.add(axesHelper);
+      
+      // Add a ground plane for better shadows
+      const groundGeometry = new THREE.PlaneGeometry(2000, 2000);
+      const groundMaterial = new THREE.ShadowMaterial({ 
+        color: 0x111111,
+        opacity: 0.5
+      });
+      const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.5;
+      ground.receiveShadow = true;
+      scene.add(ground);
+    }
+    
+    // Load the 3D model with larger scale
+    function loadModel() {
+      const mtlLoader = new THREE.MTLLoader();
+      mtlLoader.setPath("/static/");
+      
+      mtlLoader.load("output_3d.mtl", (materials) => {
+        materials.preload();
+        
+        const objLoader = new THREE.OBJLoader();
+        objLoader.setMaterials(materials);
+        objLoader.setPath("/static/");
+        
+        objLoader.load("output_3d.obj", (object) => {
+          // Center the model
+          const box = new THREE.Box3().setFromObject(object);
+          const center = box.getCenter(new THREE.Vector3());
+          object.position.sub(center);
+          
+          // Scale the model larger
+          const size = box.getSize(new THREE.Vector3()).length();
+          const scale = 300 / size; // Increased scale factor
+          object.scale.set(scale, scale, scale);
+          
+          // Apply materials and count stats
+          object.traverse((child) => {
+            if (child.isMesh) {
+              // Enable shadows
+              child.castShadow = true;
+              child.receiveShadow = true;
+              
+              // Count vertices and faces
+              if (child.geometry) {
+                stats.vertices += child.geometry.attributes.position.count;
+                stats.faces += child.geometry.index ? child.geometry.index.count / 3 : 0;
+              }
+              
+              // Count textures
+              if (child.material && child.material.map) {
+                stats.textures++;
+              }
+              
+              // Enhanced material overrides based on name
+              const matName = (child.material?.name || "").toLowerCase();
+              
+              if (matName.includes("wall")) {
+                // Sky blue color for walls
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x87CEEB, // Sky blue color
+                  roughness: 0.7,
+                  metalness: 0.1,
+                  side: THREE.DoubleSide
+                });
+              } else if (matName.includes("door")) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x5e3b1f,
+                  roughness: 0.6,
+                  metalness: 0.3,
+                  envMapIntensity: 0.3
+                });
+              } else if (matName.includes("window")) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x87ceeb,
+                  roughness: 0.1,
+                  metalness: 1,
+                  transparent: true,
+                  opacity: 0.6,
+                  envMapIntensity: 0.8,
+                  side: THREE.DoubleSide
+                });
+              } else if (matName.includes("floor")) {
+                // Grey color for floors
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x808080, // Medium grey color
+                  roughness: 0.8,
+                  metalness: 0.1
+                });
+              } else if (matName.includes("roof")) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x333333,
+                  roughness: 0.9,
+                  metalness: 0.1,
+                  bumpScale: 0.05
+                });
+              } else if (matName.includes("metal")) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0xaaaaaa,
+                  roughness: 0.3,
+                  metalness: 0.9,
+                  envMapIntensity: 1.0
+                });
+              }
+            }
+          });
+          
+          // Add the model to the scene
+          model = object;
+          scene.add(model);
+          
+          // Update UI
+          document.getElementById("preloader").style.display = "none";
+          document.getElementById("model-status").textContent = "Loaded";
+          document.getElementById("model-status").style.color = "#00f0ff";
+          
+          // Update debug info
+          updateDebugInfo();
+          
+          // Set controls target to model center
+          controls.target.copy(center);
+          controls.update();
+        }, 
+        // Progress callback
+        (xhr) => {
+          const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+          document.getElementById("model-status").textContent = `Loading ${percent}%`;
+        }, 
+        // Error callback
+        (err) => {
+          console.error("OBJ Load Error:", err);
+          document.getElementById("model-status").textContent = "Error Loading";
+          document.getElementById("model-status").style.color = "#ff3860";
+        });
+      }, 
+      // Progress callback
+      (xhr) => {
+        const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+        document.getElementById("model-status").textContent = `Loading Materials ${percent}%`;
+      }, 
+      // Error callback
+      (err) => {
+        console.error("MTL Load Error:", err);
+        document.getElementById("model-status").textContent = "Error Loading Materials";
+        document.getElementById("model-status").style.color = "#ff3860";
+      });
+    }
+    
+    // Update debug information
+    function updateDebugInfo() {
+      document.getElementById("poly-count").textContent = stats.faces.toLocaleString();
+      document.getElementById("tex-count").textContent = stats.textures.toLocaleString();
+      document.getElementById("vert-count").textContent = stats.vertices.toLocaleString();
+    }
+    
+    // Calculate FPS
+    function calculateFPS(timestamp) {
+      frameCount++;
+      
+      if (timestamp >= lastTime + 1000) {
+        fps = Math.round((frameCount * 1000) / (timestamp - lastTime));
+        frameCount = 0;
+        lastTime = timestamp;
+        document.getElementById("fps-counter").textContent = fps;
+      }
+    }
+    
+    // Animation loop
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+      
+      // Update controls
+      controls.update();
+      
+      // Calculate FPS
+      calculateFPS(timestamp);
+      
+      // Render scene
+      renderer.render(scene, camera);
+    }
+    
+    // Handle window resize
+    function onWindowResize() {
+      const container = document.getElementById("viewer-wrapper");
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+    
+    // Reset view to default
+    function resetView() {
+      camera.position.copy(defaultCamPosition);
+      controls.target.set(0, 0, 0);
+      controls.update();
+    }
+    
+    // Toggle wireframe mode
+    function toggleWireframe() {
+      if (!model) return;
+      
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.material.wireframe = !child.material.wireframe;
+          if (child.material.wireframe) {
+            child.material.wireframeLinewidth = 2;
+          }
+        }
+      });
+    }
+    
+    // Toggle grid helper
+    function toggleGrid() {
+      gridHelper.visible = !gridHelper.visible;
+    }
+    
+    // Toggle axes helper
+    function toggleAxes() {
+      axesHelper.visible = !axesHelper.visible;
+    }
+    
+    // Toggle shadows
+    function toggleShadows() {
+      if (!model) return;
+      
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = !child.castShadow;
+          child.receiveShadow = !child.receiveShadow;
+        }
+      });
+      
+      renderer.shadowMap.enabled = !renderer.shadowMap.enabled;
+    }
+    
+    // Toggle bloom effect (placeholder)
+    function toggleBloom() {
+      alert("Bloom effect will be implemented in the next version");
+    }
+    
+    // Toggle measurement mode (placeholder)
+    function toggleMeasurementMode() {
+      alert("Measurement tools will be implemented in the next version");
+    }
+    
+    // Set view mode
+    function setViewMode(mode) {
+      if (!model) return;
+      
+      // Update active button
+      document.getElementById('solid-mode').classList.remove('active');
+      document.getElementById('xray-mode').classList.remove('active');
+      document.getElementById('ghost-mode').classList.remove('active');
+      document.getElementById(mode + '-mode').classList.add('active');
+      
+      model.traverse((child) => {
+        if (child.isMesh) {
+          switch(mode) {
+            case 'solid':
+              child.material.transparent = false;
+              child.material.opacity = 1.0;
+              child.material.wireframe = false;
+              break;
+            case 'xray':
+              child.material.transparent = true;
+              child.material.opacity = 0.3;
+              child.material.wireframe = true;
+              break;
+            case 'ghost':
+              child.material.transparent = true;
+              child.material.opacity = 0.7;
+              child.material.wireframe = false;
+              break;
+          }
+        }
+      });
+    }
+    
+    // Toggle fullscreen mode
+    function toggleFullscreen() {
+      const container = document.getElementById("viewer-wrapper");
+      
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+    
+    // Take screenshot
+    function screenshot() {
+      const link = document.createElement('a');
+      link.download = 'tripod-model-screenshot-' + new Date().toISOString().slice(0,10) + '.png';
+      
+      // Create a temporary canvas with higher resolution
+      const width = renderer.domElement.width;
+      const height = renderer.domElement.height;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width * 2;
+      tempCanvas.height = height * 2;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      // Draw the renderer to the canvas at higher resolution
+      tempCtx.drawImage(renderer.domElement, 0, 0, width * 2, height * 2);
+      
+      link.href = tempCanvas.toDataURL('image/png');
+      link.click();
+    }
+    
+    // Generate QR code for AR viewing
+    function generateQRCode() {
+      // Generate a unique URL for this model's AR view
+      const modelUrl = window.location.href + '/ar';
+      const qrCodeElement = document.getElementById('qr-code');
+      
+      // Clear any existing QR code
+      qrCodeElement.innerHTML = '';
+      
+      // Generate new QR code
+      new QRCode(qrCodeElement, {
+        text: modelUrl,
+        width: 200,
+        height: 200,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+    
+    // Show AR modal
+    function showARModal() {
+      document.getElementById('ar-modal').style.display = 'flex';
+    }
+    
+    // Close AR modal
+    function closeARModal() {
+      document.getElementById('ar-modal').style.display = 'none';
+    }
+    
+    // Initialize the viewer when DOM is loaded
+    document.addEventListener('DOMContentLoaded', initViewer);
+  </script>
+</body>
+</html>
